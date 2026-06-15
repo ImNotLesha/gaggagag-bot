@@ -7,6 +7,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 from telegram.constants import ParseMode
 from telegram.error import TelegramError
+from telegram.ext import JobQueue
 
 TOKEN = "8895997320:AAGKkIkm50B4aQUlDWuihyWtdTi2ZJ2WjR4"
 API_URL = "https://grow-a-garden-2-tracker.onrender.com/api/stock"
@@ -145,7 +146,7 @@ async def send_to_all(context, text, is_urgent=False, plant_name=None):
             pass
     
     if not is_urgent:
-        for group_id in blocked_groups:
+        for group_id in list(blocked_groups):
             try:
                 await context.bot.send_message(chat_id=group_id, text=text[:4096], parse_mode=ParseMode.HTML)
                 await asyncio.sleep(0.05)
@@ -452,10 +453,15 @@ def main():
     application.add_handler(CommandHandler("startgroup", startgroup))
     application.add_handler(CallbackQueryHandler(button_handler))
     
-    job_queue = application.job_queue
-    if job_queue:
-        job_queue.run_repeating(check_stock, interval=15, first=5)
-        print("⏰ Проверка стока: раз в 15 секунд")
+    # Создаём JobQueue вручную если его нет
+    if application.job_queue is None:
+        job_queue = JobQueue()
+        job_queue.set_application(application)
+        application.job_queue = job_queue
+        application.job_queue.start()
+    
+    application.job_queue.run_repeating(check_stock, interval=15, first=5)
+    print("⏰ Проверка стока: раз в 15 секунд")
     
     print("🤖 Бот запущен!")
     print(f"👥 Подписчиков: {len(subscribed_users)}")
